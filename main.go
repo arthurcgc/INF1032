@@ -22,7 +22,7 @@ func MoviesByYear(year int, page int) (types.MovieMeta, error) {
 	}
 	query := req.URL.Query()
 	query.Add("api_key", api_key)
-	query.Add("year", strconv.Itoa(year))
+	query.Add("primary_release_year", strconv.Itoa(year))
 	query.Add("page", strconv.Itoa(page))
 	req.URL.RawQuery = query.Encode()
 
@@ -75,7 +75,7 @@ func WriteMovies(metaMovies types.MovieMeta, writer *types.InternalWriter) error
 	for _, movie := range metaMovies.Results {
 		fullMovie, err := FullMovie(movie.Id)
 		if err != nil {
-			return err
+			continue
 		}
 		if fullMovie.Budget > 0 && fullMovie.Revenue > 0 {
 			err = writer.WriteMovie(fullMovie)
@@ -92,7 +92,7 @@ func ParsePages(wg *sync.WaitGroup, year int, csvWriter *types.InternalWriter) {
 		movieIds, err := MoviesByYear(year, pageCount)
 		fmt.Printf("year: %d\t page: %d\t total pages: %d\n", year, pageCount, movieIds.TotalPages)
 		if err != nil {
-			panic(err)
+			continue
 		}
 		err = WriteMovies(movieIds, csvWriter)
 		if err != nil {
@@ -118,7 +118,7 @@ func main() {
 	defer csvWriter.CloseFile()
 
 	var wg sync.WaitGroup
-	for year := 2014; year <= 2015; year++ {
+	for year := 1900; year < 2021; year++ {
 		wg.Add(1)
 		go ParsePages(&wg, year, csvWriter)
 	}
