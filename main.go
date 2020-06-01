@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 
@@ -12,7 +14,9 @@ import (
 )
 
 var (
-	api_key = "84f39195ae013547986894bbd4652ffd"
+	api_key     = "84f39195ae013547986894bbd4652ffd"
+	logFileName = "errorLog.txt"
+	logger, _   = os.OpenFile(logFileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 )
 
 func MoviesByYear(year int, page int) (types.MovieMeta, error) {
@@ -59,6 +63,7 @@ func FullMovie(movieId int) (types.Movie, error) {
 		return types.Movie{}, err
 	}
 	body, err := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
 	if err != nil {
 		return types.Movie{}, err
 	}
@@ -75,6 +80,7 @@ func WriteMovies(metaMovies types.MovieMeta, writer *types.InternalWriter) error
 	for _, movie := range metaMovies.Results {
 		fullMovie, err := FullMovie(movie.Id)
 		if err != nil {
+			log.Println("error fetching full movie: %s", err.Error())
 			continue
 		}
 		if fullMovie.Budget > 0 && fullMovie.Revenue > 0 {
@@ -88,10 +94,12 @@ func WriteMovies(metaMovies types.MovieMeta, writer *types.InternalWriter) error
 }
 
 func ParsePages(wg *sync.WaitGroup, year int, csvWriter *types.InternalWriter) {
+	defer wg.Done()
 	for pageCount := 1; ; pageCount++ {
 		movieIds, err := MoviesByYear(year, pageCount)
 		fmt.Printf("year: %d\t page: %d\t total pages: %d\n", year, pageCount, movieIds.TotalPages)
 		if err != nil {
+			log.Println("error fetching page: %s", err.Error())
 			continue
 		}
 		err = WriteMovies(movieIds, csvWriter)
@@ -99,11 +107,9 @@ func ParsePages(wg *sync.WaitGroup, year int, csvWriter *types.InternalWriter) {
 			panic(err)
 		}
 		if pageCount > movieIds.TotalPages {
-			break
+			return
 		}
 	}
-	wg.Done()
-
 }
 
 func main() {
@@ -115,7 +121,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer csvWriter.CloseFile()
+	log.SetOutput(logger)
+	defer func() {
+		logger.Close()
+		csvWriter.CloseFile()
+	}()
 
 	var wg sync.WaitGroup
 	for year := 1900; year < 2021; year++ {
